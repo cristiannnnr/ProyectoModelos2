@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestor Financiero Personal</title>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+  <!-- Font Awesome para iconos -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.2/css/all.min.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <style>
+    body {
+      background: #f4f7fa;
+    }
+    /* Navbar customizada */
+    .navbar-custom {
+      background: #343a40;
+    }
+    .navbar-custom .navbar-brand,
+    .navbar-custom .nav-link {
+      color: #fff;
+    }
+    /* Estilo de las cards */
+    .card {
+      margin: 20px 0;
+      border: none;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .card-title i {
+      margin-right: 5px;
+    }
+    .positive {
+      color: #28a745;
+    }
+    .negative {
+      color: #dc3545;
+    }
+    /* Estilos para la tabla */
+    .table thead {
+      background: #343a40;
+      color: #fff;
+    }
+    /* Configuración del canvas del gráfico: ajustamos la altura */
+    canvas {
+      max-width: 100%;
+      height: 300px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-custom">
+    <div class="container">
+      <a class="navbar-brand" href="/">Gestor Financiero</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="container my-4">
+    <!-- Encabezado -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1 class="fw-bold">Mis Finanzas</h1>
+      <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#helpModal">
+        <i class="fa-solid fa-circle-info"></i> Ayuda
+      </button>
+    </div>
+
+    <!-- Filtro por categoría -->
+    <form method="GET" action="/">
+      <div class="row mb-3">
+        <div class="col-md-4">
+          <select name="categoria_filtro" class="form-select">
+            <option value="">Todas las categorías</option>
+            {% for cat in categorias %}
+              <option value="{{ cat }}" {% if request.args.get('categoria_filtro') == cat %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-outline-primary">
+            <i class="fa-solid fa-filter"></i> Filtrar
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Resumen en tarjetas -->
+    <div class="row">
+      <div class="col-md-4">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title"><i class="fa-solid fa-money-bill-wave"></i> Ingresos</h5>
+            <h3 class="card-text positive">${{ resumen.ingresos }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title"><i class="fa-solid fa-cart-shopping"></i> Gastos</h5>
+            <h3 class="card-text negative">${{ resumen.gastos }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title"><i class="fa-solid fa-balance-scale"></i> Balance</h5>
+            <h3 class="card-text {{ 'positive' if resumen.balance >= 0 else 'negative' }}">
+              ${{ resumen.balance }}
+            </h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sección del gráfico -->
+    <div class="card">
+      <div class="card-body">
+        <h4 class="card-title">Resumen Gráfico</h4>
+        <canvas id="myChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Formulario para agregar transacción -->
+    <div class="card">
+      <div class="card-body">
+        <h4 class="card-title"><i class="fa-solid fa-plus"></i> Agregar Transacción</h4>
+        <form method="POST" action="/agregar">
+          <div class="row">
+            <div class="col-md-3 mb-2">
+              <input type="date" name="fecha" required class="form-control" placeholder="Fecha">
+            </div>
+            <div class="col-md-3 mb-2">
+              <select name="tipo" class="form-select">
+                <option value="ingreso">Ingreso</option>
+                <option value="gasto">Gasto</option>
+              </select>
+            </div>
+            <div class="col-md-3 mb-2">
+              <input type="text" name="categoria" placeholder="Categoría" required class="form-control" list="listaCategorias">
+              <datalist id="listaCategorias">
+                {% for cat in categorias %}
+                  <option value="{{ cat }}"></option>
+                {% endfor %}
+              </datalist>
+            </div>
+            <div class="col-md-3 mb-2">
+              <input type="number" step="0.01" name="monto" placeholder="Monto" required class="form-control">
+            </div>
+          </div>
+          <div class="text-end">
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-check"></i> Agregar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Historial de transacciones con opción de borrar selecciones -->
+    <div class="card">
+      <div class="card-body">
+        <h4 class="card-title">Historial de Transacciones</h4>
+        <form method="POST" action="/borrar-seleccionados" onsubmit="return confirm('¿Estás seguro de que deseas borrar las transacciones seleccionadas?');">
+          <div class="table-responsive">
+            <table class="table table-striped align-middle">
+              <thead>
+                <tr>
+                  <th><input type="checkbox" id="seleccionarTodo"></th>
+                  <th>Fecha</th>
+                  <th>Categoría</th>
+                  <th>Tipo</th>
+                  <th>Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for t in transacciones %}
+                <tr>
+                  <!-- Agregamos un checkbox para cada transacción; el valor es su id -->
+                  <td><input type="checkbox" name="transacciones[]" value="{{ t[0] }}"></td>
+                  <td>{{ t[1] }}</td>
+                  <td>{{ t[2] }}</td>
+                  <td>{{ t[4]|capitalize }}</td>
+                  <td class="{{ 'positive' if t[4] == 'ingreso' else 'negative' }}">
+                    ${{ t[3] }}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="text-end mt-3">
+            <button type="submit" class="btn btn-danger">
+              <i class="fa-solid fa-trash"></i> Borrar Seleccionados
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal de ayuda -->
+    <div class="modal fade" id="helpModal" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="helpModalLabel">Ayuda y Soporte</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <p>
+              Utiliza este gestor financiero para llevar un registro claro de tus ingresos y gastos.
+              Agrega nuevas transacciones, revisa un resumen de tus finanzas y analiza tus datos mediante gráficos interactivos.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bootstrap JS y Popper -->
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js"></script>
+  <!-- Configuración del gráfico -->
+  <script>
+    const ctx = document.getElementById('myChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Ingresos', 'Gastos'],
+        datasets: [{
+          data: [{{ resumen.ingresos }}, {{ resumen.gastos }}],
+          backgroundColor: ['#28a745', '#dc3545'],
+          borderColor: ['#fff', '#fff'],
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: 'bottom'
+          }
+        }
+      }
+    });
+
+    // Script para seleccionar o deseleccionar todas las casillas
+    document.getElementById('seleccionarTodo').addEventListener('change', function(){
+      const checkboxes = document.querySelectorAll('input[name="transacciones[]"]');
+      checkboxes.forEach(cb => cb.checked = this.checked);
+    });
+  </script>
+</body>
+</html>
